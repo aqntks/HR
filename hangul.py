@@ -15,10 +15,10 @@ import argparse
 
 
 def main():
-    weights, images, img_size, conf_thres, iou_thres = 'weights/hangul_0622.pt', 'data/images/hangul', 320, 0.01, 0.45
+    weights, images, img_size, conf_thres, iou_thres = 'weights/best.pt', 'data/images', 320, 0.25, 0.45
 
     # 디바이스 세팅
-    device = select_device("0")  # 첫번째 gpu 사용
+    device = select_device("cpu")  # 첫번째 gpu 사용
     half = device.type != 'cpu'  # gpu + cpu 섞어서 사용
 
     # 모델 로드
@@ -52,13 +52,61 @@ def main():
         for i, det in enumerate(pred):
             if len(det):
                 result, obj, det[:, :4] = '', [], scale_coords(img.shape[2:], det[:, :4], im0s.shape).round()
-
+                lines = []
                 # 영역 검출 항목 저장
                 for *xyxy, conf, cls in reversed(det):
-                    obj.append((xyxy[0], conf, names[int(cls)]))
-                    obj.sort(key=lambda x: x[0])
+                    obj.append((xyxy, conf, names[int(cls)]))
+                    obj.sort(key=lambda x: x[0][0])
                 for s, conf, cls in obj:
-                    result = result + cls + " " + str(conf) + " "
-                print('\n\n', result)
+                    lines.append((s, cls, conf))
+
+                    # result = result + cls + " " + str(conf) + " "
+                # print('\n\n', result)
+                lines = remove_intersect_box(lines)
+
+                for l in lines:
+                    print(l[1], end='')
+                print('\n')
 
         print("\n검출 속도: " + str(time_synchronized() - startT) + '\n')
+
+
+# 검출 박스 상자의 겹친 비율
+def compute_intersect_ratio(rect1, rect2):
+    x1, y1, x2, y2 = rect1[0], rect1[1], rect1[2], rect1[3]
+    x3, y3, x4, y4 = rect2[0], rect2[1], rect2[2], rect2[3]
+
+    if x2 < x3: return 0
+    if x1 > x4: return 0
+    if y2 < y3: return 0
+    if y1 > y4: return 0
+
+    left_up_x = max(x1, x3)
+    left_up_y = max(y1, y3)
+    right_down_x = min(x2, x4)
+    right_down_y = min(y2, y4)
+
+    width = right_down_x - left_up_x
+    height = right_down_y - left_up_y
+
+    original = (y2 - y1) * (x2 - x1)
+    intersect = width * height
+
+    ratio = int(intersect / original * 100)
+
+    return ratio
+
+
+# 겹친 상자 제거 (30% 이상)
+def remove_intersect_box(lines):
+    i, line = 0, lines.copy()
+    while True:
+        if i > len(line) - 2: break
+        if compute_intersect_ratio(line[i][0], line[i+1][0]) > 30:
+            lose = i if line[i][2] < line[i+1][2] else i+1
+            del line[lose]
+        else: i += 1
+
+    return line
+
+main()
