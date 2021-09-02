@@ -1,2 +1,2 @@
-# Hangul-Recognition
-Hangul Recognition
+# HR
+HR
